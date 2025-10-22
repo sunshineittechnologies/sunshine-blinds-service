@@ -4,10 +4,11 @@ const categoryService = require('../services/categoryService');
 
 // POST - Create a new category
 router.post('/', async (req, res) => {
-  try {
-    const { categoryName, categorySubText, categoryDescription } = req.body;
 
-    const category = await categoryService.createCategory(categoryName, categorySubText, categoryDescription);
+  try {
+    const { categoryName, categorySubText, categoryDescription, categoryImageNames } = req.body;
+
+    const category = await categoryService.createCategory(categoryName, categorySubText, categoryDescription, categoryImageNames);
 
     res.status(201).json({
       success: true,
@@ -82,6 +83,45 @@ router.get('/:categoryId', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching category',
+      error: error.message
+    });
+  }
+});
+
+// PUT - Update Image Status
+router.put('/:categoryId/image-status', async (req, res) => {
+  try {
+    const { categoryId } = req.params;
+    const { status } = req.body;
+
+    const updatedCategory = await categoryService.updateImageUploadStatus(categoryId, status);
+
+    res.status(200).json({
+      success: true,
+      message: 'Image upload status updated successfully',
+      data: updatedCategory
+    });
+
+  } catch (error) {
+    console.error('Error updating image status:', error);
+
+    if (error.message === 'Category not found') {
+      return res.status(404).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    if (error.message.includes('required') || error.message.includes('must be')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Error updating image status',
       error: error.message
     });
   }

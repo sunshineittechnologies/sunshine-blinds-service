@@ -14,7 +14,11 @@ class CategoryDb {
 
   async getAllCategories() {
     const params = {
-      TableName: TABLE_NAME
+      TableName: TABLE_NAME,
+      FilterExpression: 'imageUploadStatus = :status',
+      ExpressionAttributeValues: {
+        ':status': 'completed'
+      }
     };
 
     const result = await dynamoDB.scan(params).promise();
@@ -38,6 +42,23 @@ class CategoryDb {
     return allCategories.find(
       category => category.categoryName.toLowerCase() === categoryName.toLowerCase()
     );
+  }
+
+  async updateCategoryImageStatus(categoryId, imageUploadStatus) {
+    const params = {
+      TableName: TABLE_NAME,
+      Key: {
+        categoryId
+      },
+      UpdateExpression: 'SET imageUploadStatus = :status',
+      ExpressionAttributeValues: {
+        ':status': imageUploadStatus
+      },
+      ReturnValues: 'ALL_NEW'
+    };
+
+    const result = await dynamoDB.update(params).promise();
+    return result.Attributes;
   }
 }
 

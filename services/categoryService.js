@@ -1,12 +1,13 @@
 const { v4: uuidv4 } = require('uuid');
 const categoryDb = require('../db/categoryDb');
+const awsService = require('./awsService');
 
 class CategoryService {
-  validateCategoryInput(categoryName, categorySubText, categoryDescription) {
-    if (!categoryName || !categoryDescription || !categorySubText) {
+  validateCategoryInput(categoryName, categorySubText, categoryDescription, categoryImageNames) {
+    if (!categoryName || !categoryDescription || !categorySubText || !categoryImageNames) {
       return {
         isValid: false,
-        message: 'categoryName and categoryDescription are required'
+        message: 'categoryName/categorySubText/categoryDescription/categoryImageNames are required'
       };
     }
 
@@ -38,6 +39,13 @@ class CategoryService {
       };
     }
 
+    if (categoryImageNames.length === 0) {
+      return {
+        isValid: false,
+        message: 'categoryImageNames cannot be empty'
+      }
+    }
+
     return { isValid: true };
   }
 
@@ -46,9 +54,9 @@ class CategoryService {
     return existingCategory !== undefined;
   }
 
-  async createCategory(categoryName, categorySubText, categoryDescription) {
+  async createCategory(categoryName, categorySubText, categoryDescription, categoryImageNames) {
     // Validate input
-    const validation = this.validateCategoryInput(categoryName, categorySubText, categoryDescription);
+    const validation = this.validateCategoryInput(categoryName, categorySubText, categoryDescription, categoryImageNames);
     if (!validation.isValid) {
       throw new Error(validation.message);
     }
@@ -59,11 +67,25 @@ class CategoryService {
       throw new Error(`Category with name '${categoryName}' already exists`);
     }
 
+    const categoryId = uuidv4();
+    const presignedUrlMap = new Map();
+    for(const imageName of categoryImageNames) {
+      const presignedUrl = await awsService.generatePreSignedUrl(categoryId, imageName);
+      presignedUrlMap.set(imageName, presignedUrl);
+    }
+    
+    const imagesPath = awsService.getImagePath(categoryId);
+
     // Create category object
     const categoryData = {
-      categoryId: uuidv4(),
+      categoryId,
       categoryName,
+      categorySubText,
       categoryDescription,
+      presignedUrls: Object.fromEntries(presignedUrlMap),
+      imagesPath,
+      categoryImageNames,
+      imageUploadStatus: 'pending',
       createdAt: new Date().toISOString()
     };
 
@@ -72,7 +94,12 @@ class CategoryService {
   }
 
   async getAllCategories() {
-    return await categoryDb.getAllCategories();
+    const categories = await categoryDb.getAllCategories();
+    for (const category of categories) 
+      if(category.imagesPath && category.imagesPath != '')
+        category.imagesPath = awsService.getPublicImageUrl(category.imagesPath);
+      
+    return categories;
   }
 
   async getCategoryById(categoryId) {
@@ -86,6 +113,26 @@ class CategoryService {
     }
 
     return category;
+  }
+
+  async updateImageUploadStatus(categoryId, status) {
+    if (!categoryId) {
+      throw new Error('categoryId is required');
+    }
+
+    if (status !== 'completed') {
+      throw new Error('status must be "completed"');
+    }
+
+    // Check if category exists
+    const category = await categoryDb.getCategoryById(categoryId);
+    if (!category) {
+      throw new Error('Category not found');
+    }
+
+    // Update the status
+    const updatedCategory = await categoryDb.updateCategoryImageStatus(categoryId, status);
+    return updatedCategory;
   }
 }
 
